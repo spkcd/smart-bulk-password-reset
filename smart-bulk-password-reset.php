@@ -3,9 +3,9 @@
  * Plugin Name:       Smart Bulk Password Reset
  * Plugin URI:        https://example.com/plugins/smart-bulk-password-reset/
  * Description:       Allows administrators to bulk reset passwords for users based on their role, send custom email notifications, manage templates, and log resets.
- * Version:           1.1.0
- * Author:            Cline
- * Author URI:        https://example.com/
+ * Version:           1.0.0
+ * Author:            SPARKWEB Studio
+ * Author URI:        https://sparkwebstudio.com/
  * License:           GPL v2 or later
  * License URI:       https://www.gnu.org/licenses/gpl-2.0.html
  * Text Domain:       smart-bulk-password-reset
