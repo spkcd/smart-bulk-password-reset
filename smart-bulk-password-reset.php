@@ -218,8 +218,18 @@ class Smart_Bulk_Password_Reset_Admin {
 								wp_editor( $content, $editor_id, $settings );
 								?>
 								<p class="description">
-									<?php _e( 'Edit the email content. Available placeholders: <code>{user_name}</code>, <code>{user_email}</code>, <code>{new_password}</code>.', 'smart-bulk-password-reset' ); ?>
+									<?php _e( 'Edit the email content. Available placeholders are listed below.', 'smart-bulk-password-reset' ); ?>
 								</p>
+								<div style="background-color: #f0f0f0; border: 1px solid #e0e0e0; padding: 10px 15px; margin-top: 5px; margin-bottom: 15px; border-radius: 4px;">
+									<strong><?php _e( 'Available placeholders you can use:', 'smart-bulk-password-reset' ); ?></strong>
+									<ul style="margin-top: 5px; margin-bottom: 0; padding-left: 20px;">
+										<li><code>{user_name}</code> = <?php _e( 'User’s full name', 'smart-bulk-password-reset' ); ?></li>
+										<li><code>{user_email}</code> = <?php _e( 'User’s email address', 'smart-bulk-password-reset' ); ?></li>
+										<li><code>{username}</code> = <?php _e( 'User’s login name', 'smart-bulk-password-reset' ); ?></li>
+										<li><code>{new_password}</code> = <?php _e( 'Newly generated password', 'smart-bulk-password-reset' ); ?></li>
+										<li><code>{login_url}</code> = <?php _e( 'Login link to the user portal', 'smart-bulk-password-reset' ); ?></li>
+									</ul>
+								</div>
 								<div id="sbpr_template_actions">
 									 <input type="text" id="sbpr_template_name" placeholder="<?php esc_attr_e( 'Enter Template Name', 'smart-bulk-password-reset' ); ?>" style="margin-right: 5px; display: none;">
 									 <button type="button" id="sbpr_save_template_button" class="button button-primary"><?php _e( 'Save as New Template', 'smart-bulk-password-reset' ); ?></button>
@@ -339,11 +349,14 @@ class Smart_Bulk_Password_Reset_Admin {
         var deleteTemplateButton = $('#sbpr_delete_template_button');
         var templateStatus = $('#sbpr_template_status');
 
-        // Dummy data for preview/test
+        // Dummy data for preview/test (should match PHP's smartbpr_preview_placeholders)
         var dummyData = {
             '{user_name}': 'John Doe',
-            '{user_email}': 'john.doe@example.com',
-            '{new_password}': 'password123'
+            '{user_email}': 'john@example.com',
+            '{username}': 'johndoe',
+            '{new_password}': 'Test@1234',
+            '{login_url}': 'https://crosscultural.kcdev.site/my-account/'
+            // Note: {site_title} is handled server-side if needed, not typically in JS preview
         };
 
         // Function to get content from TinyMCE editor
@@ -782,13 +795,12 @@ JS;
 			if ( ! $user ) continue;
 
 			$new_password = wp_generate_password( 12, true, true );
-			$message = str_replace(
-				array( '{user_name}', '{user_email}', '{new_password}' ),
-				array( $user->user_login, $user->user_email, $new_password ),
-				$message_template
-			);
 
-			$mail_sent = wp_mail( $user->user_email, $subject, $message, $headers );
+            // Replace placeholders in subject and message
+            $processed_subject = smartbpr_replace_placeholders( $subject, $user, $new_password );
+            $processed_message = smartbpr_replace_placeholders( $message_template, $user, $new_password );
+
+			$mail_sent = wp_mail( $user->user_email, $processed_subject, $processed_message, $headers );
 
 			if ( $mail_sent ) {
 			    wp_set_password( $new_password, $user_id );
@@ -852,10 +864,12 @@ JS;
         if ( ! is_email( $to_email ) ) { wp_send_json_error( 'Invalid email address provided.' ); }
         if ( empty( $subject ) || empty( $message_template ) ) { wp_send_json_error( 'Email subject and body cannot be empty.' ); }
 
-        $dummy_user_name = 'John Doe'; $dummy_user_email = 'john.doe@example.com'; $dummy_password = 'password123';
-        $message = str_replace( array( '{user_name}', '{user_email}', '{new_password}' ), array( $dummy_user_name, $dummy_user_email, $dummy_password ), $message_template );
+        // Use the preview function for consistent placeholder replacement with dummy data
+        $processed_subject = smartbpr_preview_placeholders( $subject );
+        $processed_message = smartbpr_preview_placeholders( $message_template );
+
         $headers = array('Content-Type: text/html; charset=UTF-8');
-        $mail_sent = wp_mail( $to_email, $subject, $message, $headers );
+        $mail_sent = wp_mail( $to_email, $processed_subject, $processed_message, $headers );
 
         if ( $mail_sent ) { wp_send_json_success( 'Test email sent successfully to ' . $to_email ); }
         else { wp_send_json_error( 'Failed to send test email.' ); } // Keep error simple for JS
@@ -1014,3 +1028,71 @@ function run_smart_bulk_password_reset() {
 	$plugin->run();
 }
 run_smart_bulk_password_reset();
+
+// =========================================================================
+// Placeholder Replacement Function
+// =========================================================================
+/**
+ * Replaces placeholders in email content.
+ *
+ * @param string $content The content (subject or body) containing placeholders.
+ * @param WP_User $user The user object.
+ * @param string $new_password The newly generated password.
+ * @return string Content with placeholders replaced.
+ */
+function smartbpr_replace_placeholders( $content, $user, $new_password ) {
+    if ( ! $user instanceof WP_User ) {
+        return $content; // Return original content if user object is invalid
+    }
+
+    $login_url = 'https://crosscultural.kcdev.site/my-account/'; // Fixed login URL
+
+    $placeholders = array(
+        '{user_name}'   => $user->display_name,
+        '{user_email}'  => $user->user_email,
+        '{username}'    => $user->user_login,
+        '{new_password}'=> $new_password,
+        '{login_url}'   => $login_url,
+    );
+
+    // Add site title placeholder for backward compatibility if used in subject/body
+    $placeholders['{site_title}'] = get_bloginfo( 'name' );
+
+    // Perform the replacement
+    foreach ( $placeholders as $placeholder => $value ) {
+        $content = str_replace( $placeholder, $value, $content );
+    }
+
+    return $content;
+}
+
+// =========================================================================
+// Preview Placeholder Replacement Function
+// =========================================================================
+/**
+ * Replaces placeholders in content using dummy data for preview/test purposes.
+ *
+ * @param string $content The content (subject or body) containing placeholders.
+ * @return string Content with placeholders replaced with dummy values.
+ */
+function smartbpr_preview_placeholders( $content ) {
+    $login_url = 'https://crosscultural.kcdev.site/my-account/'; // Fixed login URL
+
+    $dummy_placeholders = array(
+        '{user_name}'   => 'John Doe',
+        '{user_email}'  => 'john@example.com',
+        '{username}'    => 'johndoe',
+        '{new_password}'=> 'Test@1234',
+        '{login_url}'   => $login_url,
+    );
+
+    // Add site title placeholder for backward compatibility if used in subject/body
+    $dummy_placeholders['{site_title}'] = get_bloginfo( 'name' );
+
+    // Perform the replacement
+    foreach ( $dummy_placeholders as $placeholder => $value ) {
+        $content = str_replace( $placeholder, $value, $content );
+    }
+
+    return $content;
+}
